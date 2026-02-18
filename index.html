@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-1CQ4D3VQ3L"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1CQ4D3VQ3L');
+    </script>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    
+    <!-- SEO & Metadata -->
+    <title>Infinity Cubes - Real-time Menger Sponge Fractal Visualization</title>
+    <meta name="description" content="Explore a real-time, raymarched Menger sponge fractal tunnel. An interactive WebGL visualization featuring customizable speed, rotation, and color palettes.">
+    <meta name="keywords" content="Menger sponge, raymarching, fractal tunnel, WebGL experiment, interactive 3D, shader art, infinity cubes, procedural generation, GLSL">
+    <meta name="author" content="Chris Pirillo">
+    <link rel="canonical" href="https://pirillo.com/arcade/infinity-cubes.html">
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="Infinity Cubes - Real-time Menger Sponge Fractal Visualization">
+    <meta property="og:description" content="Explore a real-time, raymarched Menger sponge fractal tunnel. An interactive WebGL visualization featuring customizable speed, rotation, and color palettes.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://pirillo.com/arcade/infinity-cubes.html">
+    <meta property="og:image" content="https://pirillo.com/arcade/images/infinity-cubes.png">
+    <meta property="og:site_name" content="Pirillo Arcade">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@ChrisPirillo">
+    <meta name="twitter:creator" content="@ChrisPirillo">
+    <meta name="twitter:title" content="Infinity Cubes - Real-time Menger Sponge Fractal Visualization">
+    <meta name="twitter:description" content="Dive into an infinite fractal tunnel. Real-time WebGL rendering.">
+    <meta name="twitter:image" content="https://pirillo.com/arcade/images/infinity-cubes.png">
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Infinity Cubes",
+      "url": "https://pirillo.com/arcade/infinity-cubes.html",
+      "description": "A real-time raymarched Menger sponge fractal visualization using WebGL2.",
+      "genre": "Simulation",
+      "browserRequirements": "Requires WebGL2 support",
+      "author": {
+        "@type": "Person",
+        "name": "Chris Pirillo",
+        "url": "https://chris.pirillo.com/"
+      },
+      "image": "https://pirillo.com/arcade/images/infinity-cubes.png",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      }
+    }
+    </script>
+
+    <style>
+        :root {
+            --bg: #050505;
+            --panel-bg: rgba(15, 15, 17, 0.85);
+            --panel-border: rgba(255, 255, 255, 0.08);
+            --text: #ededed;
+            --text-muted: #888;
+            --accent: #fff;
+            --accent-hover: #ccc;
+            --danger: #ff4444;
+            --font: system-ui, -apple-system, sans-serif;
+            --radius: 12px;
+            --z-canvas: 1;
+            --z-overlay: 2;
+            --z-panel: 3;
+            --z-menu-btn: 4;
+            --z-modal: 5;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--font);
+            overflow: hidden;
+            touch-action: none; /* Prevent browser handling of gestures */
+        }
+
+        /* --- Canvas & Transitions --- */
+        canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            z-index: var(--z-canvas);
+            display: block;
+            touch-action: none;
+        }
+
+        #fade-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background: #000;
+            z-index: var(--z-overlay);
+            opacity: 1;
+            pointer-events: none;
+            transition: opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            touch-action: none;
+        }
+
+        /* --- UI Overlay Elements --- */
+        #menu-btn {
+            position: absolute;
+            top: 20px; right: 20px;
+            width: 44px; height: 44px;
+            z-index: var(--z-menu-btn);
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 50%;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 5px;
+            transition: transform 0.2s, background 0.2s;
+        }
+
+        #menu-btn:hover { background: rgba(30, 30, 35, 0.9); transform: scale(1.05); }
+        #menu-btn:active { transform: scale(0.95); }
+
+        #menu-btn span {
+            width: 20px; height: 2px;
+            background: var(--text);
+            transition: 0.3s;
+        }
+
+        .menu-open #menu-btn {
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.8);
+        }
+
+        /* --- Settings Panel --- */
+        #panel {
+            position: fixed;
+            top: 0; right: 0; bottom: 0;
+            width: 380px;
+            background: var(--panel-bg);
+            border-left: 1px solid var(--panel-border);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            z-index: var(--z-panel);
+            transform: translateX(100%);
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .menu-open #panel { transform: translateX(0); }
+
+        .panel-header {
+            position: sticky;
+            top: 0;
+            height: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-bottom: 1px solid var(--panel-border);
+            background: inherit;
+            z-index: 10;
+        }
+
+        .panel-header h2 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            margin: 0;
+        }
+
+        .help-btn {
+            position: absolute;
+            left: 24px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            border: 1px solid var(--text-muted);
+            color: var(--text-muted);
+            display: flex; justify-content: center; align-items: center;
+            font-size: 0.9rem; font-weight: bold;
+            cursor: pointer; transition: 0.2s;
+        }
+        .help-btn:hover { color: var(--text); border-color: var(--text); background: rgba(255,255,255,0.1); }
+
+        .close-btn {
+            position: absolute;
+            right: 24px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 28px; height: 28px;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 1.2rem; font-weight: bold;
+            cursor: pointer; color: var(--text-muted); transition: 0.2s;
+        }
+        .close-btn:hover { color: var(--text); }
+
+        .panel-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .panel-body::-webkit-scrollbar { width: 6px; }
+        .panel-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+
+        /* --- Controls --- */
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .control-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%; height: 4px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px; outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px; height: 16px;
+            border-radius: 50%; background: var(--accent);
+            cursor: pointer; transition: transform 0.1s;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+
+        input[type="color"] {
+            -webkit-appearance: none;
+            width: 100%; height: 32px;
+            border: none; border-radius: 6px;
+            cursor: pointer; background: none;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        input[type="color"]::-webkit-color-swatch { border: 1px solid var(--panel-border); border-radius: 6px; }
+
+        .btn-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: auto;
+            padding-top: 24px;
+            border-top: 1px solid var(--panel-border);
+        }
+
+        .btn {
+            padding: 12px 16px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--panel-border);
+            color: var(--text);
+            border-radius: var(--radius);
+            font-size: 0.85rem; font-weight: 500;
+            cursor: pointer; transition: 0.2s;
+            text-align: center;
+        }
+        .btn:hover { background: rgba(255,255,255,0.1); }
+        .btn:active { transform: scale(0.98); }
+        .btn.primary { background: var(--text); color: var(--bg); }
+        .btn.primary:hover { background: var(--accent-hover); }
+        .btn.full { grid-column: 1 / -1; }
+
+        /* --- Modal --- */
+        #modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            z-index: var(--z-modal);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        #modal-overlay.open { opacity: 1; pointer-events: all; }
+
+        .modal {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: var(--radius);
+            padding: 32px;
+            width: 90%; max-width: 400px;
+            text-align: center;
+            transform: scale(0.95); transition: transform 0.3s;
+        }
+        #modal-overlay.open .modal { transform: scale(1); }
+
+        .modal h3 { margin-bottom: 16px; font-weight: 600; }
+        .modal p { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 24px; line-height: 1.5; }
+        .modal .desc { margin-bottom: 16px; font-size: 0.85rem; padding-bottom: 16px; border-bottom: 1px solid var(--panel-border); }
+        
+        .modal-links { display: flex; flex-direction: column; gap: 12px; }
+        .modal-links a {
+            color: var(--accent);
+            text-decoration: none;
+            padding: 12px;
+            border: 1px solid var(--panel-border);
+            border-radius: var(--radius);
+            transition: 0.2s;
+        }
+        .modal-links a:hover { background: rgba(255,255,255,0.05); }
+
+        /* --- Mobile Layout Adjustments --- */
+        @media (max-width: 768px) {
+            #panel {
+                width: 100%;
+                top: auto; bottom: 0;
+                height: 75vh;
+                border-left: none;
+                border-top: 1px solid var(--panel-border);
+                transform: translateY(100%);
+                border-radius: 20px 20px 0 0;
+            }
+            .menu-open #panel { transform: translateY(0); }
+            
+            #menu-btn {
+                top: auto; bottom: 20px; right: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="glcanvas" aria-label="Interactive Menger Sponge Fractal Visualization" role="img"></canvas>
+    <div id="fade-overlay"></div>
+
+    <div id="menu-btn" title="Toggle Settings" role="button" tabindex="0" aria-label="Open Settings Menu">
+        <span></span><span></span><span></span>
+    </div>
+
+    <div id="panel" role="complementary" aria-label="Settings Panel">
+        <div class="panel-header">
+            <div class="help-btn" title="Information" role="button" tabindex="0" aria-label="Information">?</div>
+            <h2>Infinity Cubes</h2>
+            <div class="close-btn" id="panel-close-btn" title="Close" role="button" tabindex="0" aria-label="Close Settings">✕</div>
+        </div>
+        <div class="panel-body" id="controls-container">
+            <!-- Controls injected via JS -->
+            <div class="btn-grid">
+                <div class="btn" id="btn-export" role="button" tabindex="0">Export Settings</div>
+                <div class="btn" id="btn-import" role="button" tabindex="0">Import Settings</div>
+                <div class="btn full primary" id="btn-random" role="button" tabindex="0">Randomize State</div>
+                <div class="btn full" id="btn-wallpaper" role="button" tabindex="0">Export 4K Wallpaper</div>
+                <div class="btn full" id="btn-reset" style="border-color: var(--danger); color: var(--danger);" role="button" tabindex="0">Reset Defaults</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal">
+            <h3 id="modal-title">Infinity Cubes</h3>
+            <p class="desc">A real-time raymarched Menger sponge fractal.<br>Core formula and shader logic based on work by <strong>diatribes</strong>.</p>
+            <p><strong>Desktop:</strong> Left-click & drag to pan. Scroll to zoom. Click empty space to randomize.<br><br>
+               <strong>Mobile:</strong> 1-finger drag to pan. 2-finger pinch to zoom. Double-tap to randomize.</p>
+            <div class="modal-links">
+                <a href="https://pirillo.com/arcade/" target="_blank">More Apps</a>
+                <a href="https://chris.pirillo.com/" target="_blank">Follow Chris</a>
+                <a href="https://ctrlaltcreate.live/" target="_blank">Learn More</a>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="file-input" accept=".json" style="display: none;">
+
+<script>
+/**
+ * Core Application State & Defaults
+ */
+const DEFAULTS = {
+    speed: 0.4,
+    zoom: 0.5730855330116794,
+    panX: 0,
+    panY: 0,
+    tAmpX: 24,
+    tAmpY: 12,
+    tFreqX: 0.06,
+    tFreqY: 0.09,
+    orbScale: 1,
+    c1Hex: "#ffffff",
+    c2Hex: "#ffffff",
+    c3Hex: "#ff661a",
+    camRot: 0.2,
+    autoAdvance: 0
+};
+
+let state = { ...DEFAULTS };
+let autoAdvanceTimer = null;
+
+// Hex to normalized RGB
+function hexToRgb(hex) {
+    let r = 0, g = 0, b = 0;
+    if (hex.length === 4) {
+        r = parseInt(hex[1] + hex[1], 16);
+        g = parseInt(hex[2] + hex[2], 16);
+        b = parseInt(hex[3] + hex[3], 16);
+    } else if (hex.length === 7) {
+        r = parseInt(hex.substring(1, 3), 16);
+        g = parseInt(hex.substring(3, 5), 16);
+        b = parseInt(hex.substring(5, 7), 16);
+    }
+    return [r / 255, g / 255, b / 255];
+}
+
+function rgbToHex(r, g, b) {
+    const toHex = c => Math.max(0, Math.min(255, Math.round(c * 255))).toString(16).padStart(2, '0');
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+/**
+ * WebGL Setup & Shader compilation
+ */
+const canvas = document.getElementById('glcanvas');
+const gl = canvas.getContext('webgl2', { preserveDrawingBuffer: true, antialias: false });
+
+if (!gl) {
+    document.body.innerHTML = '<div style="color:white; padding:20px;">WebGL 2 is required but not supported by your browser.</div>';
+    throw new Error("WebGL2 not supported");
+}
+
+const vertexShaderSource = `#version 300 es
+    in vec4 a_position;
+    void main() {
+        gl_Position = a_position;
+    }
+`;
+
+const fragmentShaderSource = `#version 300 es
+    precision highp float;
+    out vec4 fragColor;
+
+    uniform vec2 u_resolution;
+    uniform float u_time;
+    
+    // Controlled Parameters
+    uniform float u_speed;
+    uniform float u_zoom;
+    uniform vec2 u_pan;
+    uniform float u_tAmpX;
+    uniform float u_tAmpY;
+    uniform float u_tFreqX;
+    uniform float u_tFreqY;
+    uniform float u_orbScale;
+    uniform vec3 u_c1; // phase offset
+    uniform vec3 u_c2; // base color
+    uniform vec3 u_c3; // glow color
+    uniform float u_camRot;
+
+    vec3 P(float z) {
+        return vec3(cos(z * u_tFreqX) * u_tAmpX, cos(z * u_tFreqY) * u_tAmpY, z);
+    }
+
+    float O(vec3 X, float Z, float c, float T) {
+        return length(X - vec3(sin(T*c*6.0)*6.0, sin(T*c*4.0)*2.0, T*4.0+Z)) - (c * u_orbScale);
+    }
+
+    void main() {
+        vec2 u = gl_FragCoord.xy;
+        float T = u_time * u_speed;
+        vec3 r = vec3(u_resolution, 0.0);
+
+        mat2 rot = mat2(cos(cos(T * u_camRot) * 0.6 + vec4(0.0, 33.0, 11.0, 0.0)));
+        
+        // Normalize and apply interactions
+        u = (u + u - r.xy) / r.y;
+        u *= u_zoom;
+        u -= u_pan * u_zoom;
+
+        vec3 p = P(T * 4.0);
+        vec3 Z_dir = normalize(P(T * 4.0 + 3.0) - p);
+        vec3 X_dir = normalize(vec3(Z_dir.z, 0.0, -Z_dir.x));
+        vec3 D = vec3(rot * u, 1.0) * mat3(-X_dir, cross(X_dir, Z_dir), Z_dir);
+
+        vec3 c_col = vec3(0.0);
+        float d = 4.0;
+        float j = 0.0;
+        float e = 1.0; 
+        
+        vec3 q = vec3(0.0);
+        vec3 X = vec3(0.0);
+        float tun = 0.0;
+        float m_dist = 0.0;
+        float s = 0.5;
+        vec3 p_abs = vec3(0.0);
+
+        // Colors mapping: map 0-1 inputs to the shader's expected magnitude ranges
+        vec3 phase = u_c1 * 6.28318; // 0-2PI phase
+        vec3 colBase = u_c2 * 25.0;  // Boosted base color intensity
+        vec3 colGlow = u_c3 * 10.0;
+
+        for(float i = 1.0; i <= 100.0; i++) {
+            p += j + D * s;
+            q = p;
+
+            X = p - P(p.z);
+            X.z = p.z;
+            tun = 4.0 - length(max(abs(X.x), abs(X.y)));
+
+            e = max(min(O(X, 5.0, 0.1, T), min(O(X, 7.0, 0.15, T), O(X, 9.0, 0.2, T))), 0.001);
+
+            m_dist = 10.0;
+
+            #define m_step(f, h) s /= (f); p_abs = abs(fract(q/s)*s - s*0.5); m_dist = min(m_dist, min(max(p_abs.x, p_abs.y), min(max(p_abs.y, p_abs.z), max(p_abs.x, p_abs.z))) - s/(h));
+
+            s = 128.0; m_step(32.0, 8.0);
+            s = 6.0;   m_step(2.0, 6.0); m_step(2.0, 4.0);
+            s = 32.0;  m_step(2.0, 4.0);
+
+            s = min(e * 0.5, max(tun, 0.001 + 0.7 * abs(m_dist)));
+            d += s;
+            D += s < 0.01 ? -0.1 : 0.0;
+
+            c_col += (u_c2 + cos(0.6 * i + phase)) / s + colBase * s + 10.0 * colGlow / max(e, 0.0001);
+        }
+
+        fragColor = vec4(tanh(c_col * c_col / 7e8 * exp(d / 20.0)), 1.0);
+    }
+`;
+
+function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.error(gl.getShaderInfoLog(shader));
+        gl.deleteShader(shader);
+        return null;
+    }
+    return shader;
+}
+
+const program = gl.createProgram();
+gl.attachShader(program, createShader(gl, gl.VERTEX_SHADER, vertexShaderSource));
+gl.attachShader(program, createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource));
+gl.linkProgram(program);
+gl.useProgram(program);
+
+const positionBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+const positionLocation = gl.getAttribLocation(program, "a_position");
+gl.enableVertexAttribArray(positionLocation);
+gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+const uniforms = {
+    resolution: gl.getUniformLocation(program, "u_resolution"),
+    time: gl.getUniformLocation(program, "u_time"),
+    speed: gl.getUniformLocation(program, "u_speed"),
+    zoom: gl.getUniformLocation(program, "u_zoom"),
+    pan: gl.getUniformLocation(program, "u_pan"),
+    tAmpX: gl.getUniformLocation(program, "u_tAmpX"),
+    tAmpY: gl.getUniformLocation(program, "u_tAmpY"),
+    tFreqX: gl.getUniformLocation(program, "u_tFreqX"),
+    tFreqY: gl.getUniformLocation(program, "u_tFreqY"),
+    orbScale: gl.getUniformLocation(program, "u_orbScale"),
+    c1: gl.getUniformLocation(program, "u_c1"),
+    c2: gl.getUniformLocation(program, "u_c2"),
+    c3: gl.getUniformLocation(program, "u_c3"),
+    camRot: gl.getUniformLocation(program, "u_camRot"),
+};
+
+/**
+ * Render Loop
+ */
+let lastTime = 0;
+function render(time, force = false) {
+    if (!force) requestAnimationFrame(render);
+    
+    lastTime = time * 0.001; // ms to s
+
+    // Handle canvas resize natively
+    if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+        gl.viewport(0, 0, canvas.width, canvas.height);
+    }
+
+    gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
+    gl.uniform1f(uniforms.time, lastTime);
+    
+    gl.uniform1f(uniforms.speed, state.speed);
+    gl.uniform1f(uniforms.zoom, state.zoom);
+    gl.uniform2f(uniforms.pan, state.panX, state.panY);
+    gl.uniform1f(uniforms.tAmpX, state.tAmpX);
+    gl.uniform1f(uniforms.tAmpY, state.tAmpY);
+    gl.uniform1f(uniforms.tFreqX, state.tFreqX);
+    gl.uniform1f(uniforms.tFreqY, state.tFreqY);
+    gl.uniform1f(uniforms.orbScale, state.orbScale);
+    gl.uniform1f(uniforms.camRot, state.camRot);
+
+    const c1 = hexToRgb(state.c1Hex);
+    const c2 = hexToRgb(state.c2Hex);
+    const c3 = hexToRgb(state.c3Hex);
+    gl.uniform3f(uniforms.c1, c1[0], c1[1], c1[2]);
+    gl.uniform3f(uniforms.c2, c2[0], c2[1], c2[2]);
+    gl.uniform3f(uniforms.c3, c3[0], c3[1], c3[2]);
+
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+}
+
+/**
+ * UI Generation & Binding
+ */
+const config = [
+    { key: 'speed', label: 'Time Speed', type: 'range', min: 0, max: 3, step: 0.1 },
+    { key: 'camRot', label: 'Camera Rotation', type: 'range', min: 0, max: 1, step: 0.05 },
+    { key: 'tAmpX', label: 'Tunnel Amp X', type: 'range', min: 0, max: 50, step: 1 },
+    { key: 'tAmpY', label: 'Tunnel Amp Y', type: 'range', min: 0, max: 50, step: 1 },
+    { key: 'tFreqX', label: 'Tunnel Freq X', type: 'range', min: 0.01, max: 0.2, step: 0.01 },
+    { key: 'tFreqY', label: 'Tunnel Freq Y', type: 'range', min: 0.01, max: 0.2, step: 0.01 },
+    { key: 'orbScale', label: 'Orb Size', type: 'range', min: 0, max: 3, step: 0.1 },
+    { key: 'c1Hex', label: 'Phase Shift (Color 1)', type: 'color' },
+    { key: 'c2Hex', label: 'Base Color (Color 2)', type: 'color' },
+    { key: 'c3Hex', label: 'Glow Color (Color 3)', type: 'color' },
+    { key: 'autoAdvance', label: 'Auto Advance (Sec)', type: 'range', min: 0, max: 30, step: 1 }
+];
+
+const container = document.getElementById('controls-container');
+const uiInputs = {};
+
+// Insert sliders dynamically before the buttons
+const btnGrid = document.querySelector('.btn-grid');
+
+config.forEach(cfg => {
+    const group = document.createElement('div');
+    group.className = 'control-group';
+    
+    const header = document.createElement('div');
+    header.className = 'control-header';
+    
+    const label = document.createElement('span');
+    label.innerText = cfg.label;
+    
+    const valDisplay = document.createElement('span');
+    valDisplay.innerText = state[cfg.key];
+    if (cfg.type === 'color') valDisplay.style.display = 'none';
+
+    header.appendChild(label);
+    header.appendChild(valDisplay);
+    group.appendChild(header);
+
+    const input = document.createElement('input');
+    input.type = cfg.type;
+    if (cfg.type === 'range') {
+        input.min = cfg.min; input.max = cfg.max; input.step = cfg.step;
+    }
+    input.value = state[cfg.key];
+
+    input.addEventListener('input', (e) => {
+        let val = cfg.type === 'range' ? parseFloat(e.target.value) : e.target.value;
+        state[cfg.key] = val;
+        if (cfg.type === 'range') valDisplay.innerText = val === 0 && cfg.key === 'autoAdvance' ? 'Off' : val;
+        if (cfg.key === 'autoAdvance') handleAutoAdvance();
+    });
+
+    group.appendChild(input);
+    container.insertBefore(group, btnGrid);
+    uiInputs[cfg.key] = { input, display: valDisplay };
+});
+
+function updateUI() {
+    config.forEach(cfg => {
+        const ui = uiInputs[cfg.key];
+        ui.input.value = state[cfg.key];
+        if (cfg.type === 'range') {
+            ui.display.innerText = (cfg.key === 'autoAdvance' && state[cfg.key] === 0) ? 'Off' : Number(state[cfg.key]).toFixed(2).replace(/\.00$/, '');
+        }
+    });
+}
+
+function handleAutoAdvance() {
+    if (autoAdvanceTimer) clearInterval(autoAdvanceTimer);
+    if (state.autoAdvance > 0) {
+        autoAdvanceTimer = setInterval(() => triggerTransition(), state.autoAdvance * 1000);
+    }
+}
+
+/**
+ * Randomization & Transition System
+ */
+const overlay = document.getElementById('fade-overlay');
+
+function randomizeValues() {
+    state.speed = (Math.random() * 1.5 + 0.2).toFixed(2);
+    state.camRot = (Math.random() * 0.8).toFixed(2);
+    state.tAmpX = Math.floor(Math.random() * 40 + 5);
+    state.tAmpY = Math.floor(Math.random() * 30 + 5);
+    state.tFreqX = (Math.random() * 0.15 + 0.02).toFixed(2);
+    state.tFreqY = (Math.random() * 0.15 + 0.02).toFixed(2);
+    state.orbScale = (Math.random() * 2.5 + 0.2).toFixed(2);
+    
+    // Generate harmonious random colors
+    const rH = () => rgbToHex(Math.random(), Math.random(), Math.random());
+    state.c1Hex = rH();
+    state.c2Hex = rH();
+    state.c3Hex = rH();
+    
+    updateUI();
+}
+
+let isTransitioning = false;
+function triggerTransition() {
+    if (isTransitioning) return;
+    isTransitioning = true;
+    overlay.style.opacity = 1;
+    
+    setTimeout(() => {
+        randomizeValues();
+        overlay.style.opacity = 0;
+        setTimeout(() => isTransitioning = false, 400); // wait for fade out
+    }, 400); // wait for fade in
+}
+
+/**
+ * Interaction Handling (Mouse & Touch)
+ */
+let isDragging = false;
+let startX, startY;
+let startPanX, startPanY;
+let lastTap = 0;
+let initialPinchDist = null;
+let initialZoom = null;
+
+// Helper to check if event originated from UI
+function isUIEvent(e) {
+    return e.target.closest('#panel') || e.target.closest('#menu-btn') || e.target.closest('.modal');
+}
+
+// Mouse / Pointer logic (Pan & Click)
+canvas.addEventListener('pointerdown', (e) => {
+    if (isUIEvent(e)) return;
+    isDragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    startPanX = state.panX;
+    startPanY = state.panY;
+});
+
+window.addEventListener('pointermove', (e) => {
+    if (!isDragging) return;
+    // Don't pointer-pan if pinching
+    if (e.pointerType === 'touch' && initialPinchDist !== null) return; 
+
+    const dx = (e.clientX - startX) / canvas.clientHeight * 2.0;
+    const dy = (e.clientY - startY) / canvas.clientHeight * 2.0;
+    
+    state.panX = startPanX + dx / state.zoom;
+    state.panY = startPanY - dy / state.zoom; // Invert Y for intuitive drag
+});
+
+window.addEventListener('pointerup', (e) => {
+    if (!isDragging) return;
+    isDragging = false;
+    
+    // Check for click (minimal movement)
+    const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
+    if (dist < 5 && e.pointerType === 'mouse' && !document.body.classList.contains('menu-open')) {
+        triggerTransition();
+    }
+});
+
+// Scroll to zoom (Desktop)
+canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const zoomFactor = 1.1;
+    if (e.deltaY < 0) state.zoom *= zoomFactor;
+    else state.zoom /= zoomFactor;
+    state.zoom = Math.max(0.1, Math.min(state.zoom, 10.0));
+}, { passive: false });
+
+// Touch Gestures (Pinch-Zoom & Double Tap)
+canvas.addEventListener('touchstart', (e) => {
+    if (isUIEvent(e)) return;
+    if (e.touches.length === 2) {
+        // Init pinch
+        isDragging = false; // Override pointer pan
+        initialPinchDist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+        );
+        initialZoom = state.zoom;
+    } else if (e.touches.length === 1) {
+        // Double tap detection
+        const currentTime = new Date().getTime();
+        const tapLength = currentTime - lastTap;
+        if (tapLength < 300 && tapLength > 0 && !document.body.classList.contains('menu-open')) {
+            triggerTransition();
+            e.preventDefault();
+        }
+        lastTap = currentTime;
+    }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 2 && initialPinchDist !== null) {
+        e.preventDefault(); // Stop scroll
+        const dist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+        );
+        state.zoom = initialZoom * (dist / initialPinchDist);
+        state.zoom = Math.max(0.1, Math.min(state.zoom, 10.0));
+    } else if (e.touches.length === 1) {
+        e.preventDefault(); // Stop pull-to-refresh when panning
+    }
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => {
+    if (e.touches.length < 2) initialPinchDist = null;
+});
+
+/**
+ * UI State Management (Menu, Modal, Import/Export)
+ */
+const menuBtn = document.getElementById('menu-btn');
+const helpBtn = document.querySelector('.help-btn');
+const modalOverlay = document.getElementById('modal-overlay');
+const closeBtn = document.getElementById('panel-close-btn');
+
+menuBtn.addEventListener('click', () => {
+    document.body.classList.toggle('menu-open');
+});
+
+closeBtn.addEventListener('click', () => {
+    document.body.classList.remove('menu-open');
+});
+
+helpBtn.addEventListener('click', () => {
+    modalOverlay.classList.add('open');
+});
+
+// Close panel/modal on outside click or Esc
+window.addEventListener('pointerdown', (e) => {
+    if (modalOverlay.classList.contains('open') && !e.target.closest('.modal')) {
+        modalOverlay.classList.remove('open');
+        return;
+    }
+    
+    // Check if menu is open, and only close it if clicking the canvas directly.
+    // This prevents native UI elements (like color pickers) from accidentally closing the menu.
+    if (document.body.classList.contains('menu-open')) {
+        if (e.target.tagName.toLowerCase() === 'canvas' || e.target.id === 'fade-overlay') {
+            document.body.classList.remove('menu-open');
+        }
+    }
+});
+
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        modalOverlay.classList.remove('open');
+        document.body.classList.remove('menu-open');
+    }
+});
+
+// Button Actions
+document.getElementById('btn-random').addEventListener('click', () => {
+    triggerTransition();
+});
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+    state = { ...DEFAULTS };
+    state.panX = 0; state.panY = 0; state.zoom = 1;
+    updateUI();
+    handleAutoAdvance();
+});
+
+// 4K Export
+document.getElementById('btn-wallpaper').addEventListener('click', () => {
+    const origW = canvas.width;
+    const origH = canvas.height;
+    
+    // Force 4K resolution
+    canvas.width = 3840;
+    canvas.height = 2160;
+    gl.viewport(0, 0, 3840, 2160);
+    
+    // Render synchronous frame
+    render(lastTime * 1000, true);
+    
+    const link = document.createElement('a');
+    const d = new Date();
+    const dateStr = `${d.getFullYear()}${(d.getMonth()+1).toString().padStart(2,'0')}${d.getDate().toString().padStart(2,'0')}_${d.getHours()}${d.getMinutes()}`;
+    link.download = `MengerTunnel_4K_${dateStr}.png`;
+    link.href = canvas.toDataURL('image/png', 1.0);
+    link.click();
+    
+    // Restore
+    canvas.width = origW;
+    canvas.height = origH;
+    gl.viewport(0, 0, origW, origH);
+});
+
+// JSON Export
+document.getElementById('btn-export').addEventListener('click', () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+    const link = document.createElement('a');
+    const d = new Date();
+    const dateStr = `${d.getFullYear()}${(d.getMonth()+1).toString().padStart(2,'0')}${d.getDate().toString().padStart(2,'0')}_${d.getHours()}${d.getMinutes()}`;
+    link.download = `MengerTunnel_Settings_${dateStr}.json`;
+    link.href = dataStr;
+    link.click();
+});
+
+// JSON Import
+const fileInput = document.getElementById('file-input');
+document.getElementById('btn-import').addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const parsed = JSON.parse(e.target.result);
+            state = { ...state, ...parsed };
+            updateUI();
+            handleAutoAdvance();
+            // Trigger a fast fade to apply
+            overlay.style.transitionDuration = '0.2s';
+            overlay.style.opacity = 1;
+            setTimeout(() => { overlay.style.opacity = 0; overlay.style.transitionDuration = '0.4s'; }, 200);
+        } catch (err) {
+            alert("Invalid Settings File");
+        }
+    };
+    reader.readAsText(file);
+    fileInput.value = ''; // reset
+});
+
+/**
+ * Boot Sequence
+ */
+// Fade in on load, initialize with defaults
+window.onload = () => {
+    state = { ...DEFAULTS };
+    updateUI();
+    requestAnimationFrame(render);
+    
+    // Initial fade in
+    setTimeout(() => {
+        overlay.style.opacity = 0;
+    }, 100);
+};
+
+</script>
+</body>
+</html>
